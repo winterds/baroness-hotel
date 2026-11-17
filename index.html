@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hotel Murder</title>
+<style>
+:root{--bg:#f6f3ee;--card:#fff;--tx:#1d1b19;--mu:#6d675f;--ac:#b3261e;--bd:#ddd6cb;--ok:#2e7d4f;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#17151a;--card:#232027;--tx:#eee9e2;--mu:#a49d94;--ac:#ff6b60;--bd:#3a353d;--ok:#6fcf97;color-scheme:dark}}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{max-width:760px;margin:0 auto;padding:14px}
+h1{font-family:Georgia,serif;margin:.2em 0}h3{margin:.2em 0 .5em}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:10px 0}
+.mu{color:var(--mu);font-size:.9em}
+button,input,select{font:inherit;color:var(--tx)}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:9px 14px;cursor:pointer}
+button.s{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+button.on{outline:3px solid var(--ok)}button:disabled{opacity:.4;cursor:default}
+input,select{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:9px;width:100%;margin:4px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bld{display:grid;gap:4px;max-width:340px}
+.fl{display:grid;grid-template-columns:28px repeat(3,1fr);gap:4px;align-items:center}
+.fl button{padding:7px 0}.fl span{font-size:.8em;color:var(--mu);text-align:center}
+.rm{background:var(--card);color:var(--tx);border:1px solid var(--bd)}.mob{background:var(--mu);color:#fff}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;border:1px solid var(--bd);margin:2px}
+.dead{text-decoration:line-through;color:var(--mu)}
+ul{padding-left:20px;margin:.3em 0}.big{font-size:2em;font-weight:700;letter-spacing:.1em}
+</style></head><body><div id="app">Loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* Hotel Murder — serverless. The room host's browser is the game server (PeerJS/WebRTC).
+   Free PeerJS cloud is used only for the initial handshake. */
+const $app=document.getElementById('app');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ROLES={
+hid:{n:'?',t:'?',k:'none',d:''},
+civ:{n:'Civilian',t:'c',k:'none',d:'No night ability. Find the murderers.'},
+drunk:{n:'Drunk',t:'d',k:'room',d:'Each night choose a room and sleep there. You win if the mob sends you away.'},
+lock:{n:'Locksmith',t:'c',k:'room',d:'Lock a room: the Murderer cannot enter it tonight. Not the same room two nights in a row.'},
+house:{n:'Housekeeper',t:'c',k:'floor',d:'Choose a floor: learn how many people sleep there tonight.'},
+rac:{n:'Rope Access Cleaner',t:'c',k:'col',d:'Choose a row (the same room position on every floor): learn how many people sleep there tonight.'},
+det:{n:'Detective',t:'c',k:'person',d:'Choose a person: learn which floor they sleep on.'},
+asst:{n:'Assistant',t:'m',k:'person',d:'Choose a person: learn their floor. Shared with your team.'},
+murd:{n:'Murderer',t:'m',k:'room',d:'Choose a room: anyone inside dies, unless the Locksmith locked it.'},
+wit:{n:'Witness',t:'c',k:'floor',d:'Choose a floor: if a room there is targeted by the murderer, learn whether the murderer sleeps on that floor, a lower or a higher one.'}};
+const TEAM={c:'Civilians',m:'Murderers',d:'Drunk'};
+const SL={mob:['Mob Justice','⚖'],empty:['Empty','∅'],murdered:['Murdered','🔪'],body:['Body Found','💀']};
+const fl=r=>Math.floor(r/100);
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const rand=n=>Array.from({length:n},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('');
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+let uid=ls('hm_uid')||('u'+rand(10)),name=ls('hm_name')||'',code='',isHost=false,peer,conn,conns={};
+let HG=null,HP={},force=false;            // host-only: true state
+let G=null,P={},mine={},sel=null,selKey='';  // what the UI shows
+ls('hm_uid',uid);
+
+/* ---------- networking ---------- */
+function startHost(c,resume){
+ code=c;isHost=true;ls('hm_code',code);ls('hm_host','1');ls('hm_name',name);
+ peer=new Peer('hm-'+code);
+ peer.on('error',e=>{if(e.type==='unavailable-id'&&!resume)startHost(rand(4));else alert('Network error: '+e.type)});
+ peer.on('open',()=>{
+  if(!resume){HG={host:uid,phase:'lobby'};HP={[uid]:{name}}}
+  mine=HP[uid];tick();
+ });
+ peer.on('connection',cn=>{
+  cn.on('data',m=>{
+   if(m.t==='join'){
+    const known=HP[m.uid]||(HG.pl&&HG.pl[m.uid]);
+    if(!known&&(HG.phase!=='lobby'||Object.keys(HP).length>=9))return cn.send({t:'err',m:HG.phase!=='lobby'?'This game has already started.':'The room is full.'});
+    cn.u=m.uid;conns[m.uid]=cn;HP[m.uid]=HP[m.uid]||{};HP[m.uid].name=m.name;tick();
+   }else if(cn.u)onMsg(cn.u,m);
+  });
+ });
+}
+function startClient(c){
+ code=c.toUpperCase().trim();ls('hm_code',code);ls('hm_host','0');ls('hm_name',name);isHost=false;
+ peer=new Peer();
+ peer.on('error',e=>{if(e.type==='peer-unavailable'){alert('Room not found. Check the code.');leave()}});
+ peer.on('open',connect);
+ render();
+}
+function connect(){
+ conn=peer.connect('hm-'+code,{reliable:true});
+ conn.on('open',()=>conn.send({t:'join',uid,name}));
+ conn.on('data',m=>{
+  if(m.t==='s'){G=m.G;P=m.P;if(!mine.name)mine={...(P[uid]||{}),name};render()}
+  else if(m.t==='err'){alert(m.m);leave()}
+ });
+ conn.on('close',()=>{G=null;render();setTimeout(()=>{if(peer&&!peer.destroyed)connect()},2000)});
+}
+function push(){if(isHost)onMsg(uid,{t:'mine',m:mine});else if(conn&&conn.open)conn.send({t:'mine',m:mine})}
+function leave(){['hm_code','hm_host','hm_save'].forEach(k=>ls(k,null));location.reload()}
+
+/* ---------- host engine ---------- */
+function onMsg(u,m){
+ if(m.t==='mine'&&HP[u]){const x=m.m||{};HP[u]={name:HP[u].name,act:x.act,vote:x.vote,prop:x.prop,skip:x.skip};tick()}
+}
+function sg(u){ // what player u may see
+ const o=clone(HG),end=HG.phase==='end',me=HG.pl&&HG.pl[u],mt=me&&ROLES[me.role].t==='m';
+ delete o.seen;o.info={[u]:(HG.info||{})[u]||[]};o.lastLock=me&&me.role==='lock'?HG.lastLock:null;
+ if(HG.pl){o.pl={};for(const k in HG.pl){const p=HG.pl[k],show=end||k===u,tm=mt&&ROLES[p.role].t==='m';
+  o.pl[k]={name:p.name,alive:p.alive,role:show||tm?p.role:'hid',room:show?p.room:0}}}
+ return o;
+}
+function sp(){const o={};for(const k in HP){const p=HP[k];o[k]={name:p.name};if(p.act)o[k].act={n:p.act.n};if(p.vote)o[k].vote=p.vote;if(p.skip)o[k].skip=p.skip}return o}
+function tick(){let i=0;while(step()&&i++<20);broadcast()}
+function broadcast(){
+ ls('hm_save',JSON.stringify({HG,HP}));
+ for(const u in conns){try{if(conns[u].open)conns[u].send({t:'s',G:sg(u),P:sp()})}catch(e){}}
+ G=sg(uid);P=sp();if(HP[uid])mine={...HP[uid],...mine,name};render();
+}
+function step(){
+ if(!HG||HG.phase==='lobby'||HG.phase==='end')return false;
+ const g=clone(HG);let ch=false;
+ const al=alive(g),A=u=>HP[u]||{};
+ if(g.phase==='night'){
+  if(force||al.every(u=>A(u).act?.n===g.night)){force=false;resolve(g);ch=true}
+ }else if(g.phase==='day'){
+  const need=Math.ceil(al.length/2);
+  if(g.prop){
+   const y=al.filter(u=>A(u).vote?.id===g.prop.id&&A(u).vote.y).length;
+   const no=al.filter(u=>A(u).vote?.id===g.prop.id&&!A(u).vote.y).length;
+   if(y>=need){execMob(g);ch=true}
+   else if(no>al.length-need){g.log.push('Mob justice on room '+g.prop.room+' was rejected.');g.prop=null;ch=true}
+  }else{
+   for(const u of al){const p=A(u).prop;
+    if(p&&p.seq>(g.seen[u]||0)){g.seen[u]=p.seq;g.prop={id:u+':'+p.seq,room:p.room,by:u};ch=true;break}}
+  }
+  if(!ch&&(force||al.filter(u=>A(u).skip===g.day).length>=need)){force=false;g.log.push('The day passes without a mob.');endDay(g);ch=true}
+ }
+ if(ch)HG=g;return ch;
+}
+const alive=g=>Object.keys(g.pl).filter(u=>g.pl[u].alive);
+function checkWin(g){
+ const al=alive(g),m=al.filter(u=>ROLES[g.pl[u].role].t==='m').length;
+ if(m===0)g.winner='c';else if(m*2>al.length)g.winner='m';
+ if(g.winner)g.phase='end';
+}
+function endDay(g){
+ if(g.winner)return;
+ if(g.day>=g.D){g.winner='m';g.phase='end'}
+ else{g.phase='night';g.night=g.day;g.prop=null}
+}
+function execMob(g){
+ const r=g.prop.room,v=alive(g).find(u=>g.pl[u].room===r);g.st[r]=v?'mob':'empty';g.prop=null;
+ if(v){g.pl[v].alive=false;g.log.push('Mob justice on room '+r+': '+g.pl[v].name+' leaves the game.');
+  if(g.pl[v].role==='drunk'){g.winner='d';g.phase='end';return}
+  checkWin(g)}
+ else g.log.push('Mob justice on room '+r+': it was empty.');
+ endDay(g);
+}
+function resolve(g){
+ const al=alive(g),N=g.night,A=u=>u&&HP[u]?.act?.n===N?HP[u].act.v:null;
+ const who=r=>al.find(u=>g.pl[u].role===r),pos={};al.forEach(u=>pos[u]=g.pl[u].room);
+ const add=(u,t)=>{if(u)(g.info[u]=g.info[u]||[]).push('Night '+N+': '+t)};
+ const team=al.filter(u=>ROLES[g.pl[u].role].t==='m');
+ const d=who('drunk');if(d&&A(d))pos[d]=A(d);
+ const l=who('lock');let lock=null;
+ if(l){lock=A(l);if(lock===g.lastLock)lock=null;g.lastLock=lock}
+ const h=who('house'),hv=A(h);if(hv)add(h,'Floor '+hv+' has '+al.filter(u=>fl(pos[u])===hv).length+' people.');
+ const r=who('rac'),rv=A(r);if(rv)add(r,'Row '+rv+' has '+al.filter(u=>pos[u]%100===rv).length+' people.');
+ const dt=who('det'),dv=A(dt);if(dv&&pos[dv]!==undefined)add(dt,g.pl[dv].name+' sleeps on floor '+fl(pos[dv])+'.');
+ const as=who('asst'),av=A(as);
+ if(av&&pos[av]!==undefined)team.forEach(u=>add(u,'Assistant: '+g.pl[av].name+' sleeps on floor '+fl(pos[av])+'.'));
+ const m=who('murd'),t=A(m);let vic=[];
+ if(m&&t){if(t===lock)team.forEach(u=>add(u,'Room '+t+' was locked. Nothing happened.'));
+  else{vic=al.filter(u=>pos[u]===t);team.forEach(u=>add(u,vic.length?'Room '+t+': '+vic.map(x=>g.pl[x].name).join(', ')+' died.':'Room '+t+' was empty.'))}}
+ const w=who('wit'),wf=A(w);
+ if(w&&wf){if(m&&t&&fl(t)===wf){const mf=fl(pos[m]);add(w,'A room on floor '+wf+' was targeted. The murderer sleeps on '+(mf===wf?'this floor':mf<wf?'a lower floor':'a higher floor')+'.')}
+  else add(w,'No room on floor '+wf+' was targeted.')}
+ vic.forEach(u=>g.pl[u].alive=false);
+ if(m&&t&&t!==lock)g.st[t]=vic.length?'murdered':'empty';
+ g.log.push('Night '+N+': '+(vic.length?vic.map(u=>g.pl[u].name).join(', ')+' left the game.':'nobody left the game.'));
+ g.phase='day';g.day=N+1;g.prop=null;checkWin(g);
+}
+function start(){
+ const ids=Object.keys(HP).filter(u=>HP[u].name);const n=ids.length;
+ if(n<5||n>9)return alert('Need 5 to 9 players.');
+ const rooms=[];for(let f=1;f<=n;f++)for(let c=1;c<=3;c++)rooms.push(f*100+c);
+ const rr=shuffle(rooms).slice(0,n);
+ const pool=shuffle(['civ','drunk','lock','house','rac','det','asst','wit']).slice(0,n-1);
+ const roles=shuffle(['murd',...pool]);
+ const g={host:uid,phase:'day',day:1,night:0,n,D:n<=6?3:4,pl:{},st:{},log:['Day 1 begins. '+(n-4)+' room(s) have a body found. Talk, then decide whether to hold a mob.'],info:{},seen:{},lastLock:null,prop:null};
+ shuffle(ids).forEach((u,i)=>g.pl[u]={name:HP[u].name,room:rr[i],role:roles[i],alive:true});
+ shuffle(rooms.filter(r=>!rr.includes(r))).slice(0,n-4).forEach(r=>g.st[r]='body');
+ HG=g;tick();
+}
+
+/* ---------- UI ---------- */
+function bld(clickable,opts={}){
+ let h='<div class="bld">';
+ for(let f=G.n;f>=1;f--){h+='<div class="fl"><span>F'+f+'</span>';
+  for(let c=1;c<=3;c++){const r=f*100+c,m=(G.st||{})[r];
+   const dis=opts.disable===r||!clickable;
+   h+='<button title="'+(m?SL[m][0]:'')+'" class="'+(m?'mob':'rm')+(sel===r?' on':'')+'" '+(dis?'disabled ':'')+'data-a="sel" data-v="'+r+'">'+r+(m?' '+SL[m][1]:'')+'</button>'}
+  h+='</div>'}
+ return h+'</div>';
+}
+function render(){
+ if(!ls('hm_code')){
+  $app.innerHTML='<h1>Hotel Murder</h1><div class="card"><h3>Join the party</h3><input id="nm" placeholder="Your nickname" maxlength="16" value="'+esc(name)+'">'+
+  '<div class="row"><button data-a="new">Create game (you are the host)</button></div><p class="mu">or join with a code</p><div class="row"><input id="cd" placeholder="CODE" maxlength="4" style="width:120px;text-transform:uppercase"><button class="s" data-a="join">Join</button></div></div>'+
+  '<p class="mu">Use your own voice chat (Discord, LINE, etc.) while you play.</p>';return}
+ const head='<div class="row" style="justify-content:space-between"><h1>Hotel Murder</h1><div><span class="tag">Code <b>'+esc(code)+'</b></span><button class="s" data-a="leave">Leave</button></div></div>';
+ if(!G){$app.innerHTML=head+'<div class="card">Connecting to the host… If this never finishes, check the code or ask the host to keep their tab open.</div>';return}
+ if(G.phase==='lobby'){
+  const ids=Object.keys(P).filter(u=>P[u].name);
+  $app.innerHTML=head+'<div class="card"><div class="big">'+esc(code)+'</div><p class="mu">Share this code. Friends open this page and join. 5–9 players.</p>'+
+  '<h3>Players ('+ids.length+')</h3>'+ids.map(u=>'<span class="tag">'+esc(P[u].name)+(u===G.host?' ★':'')+'</span>').join('')+
+  '<p>'+(isHost?'<button data-a="start" '+(ids.length<5||ids.length>9?'disabled':'')+'>Start game</button>':'<span class="mu">Waiting for the host to start…</span>')+'</p></div>';return}
+ const me=G.pl[uid];
+ if(!me){$app.innerHTML=head+'<div class="card">This game has already started. You are not in it.</div>';return}
+ const R=ROLES[me.role];
+ const key=G.phase+G.day+G.night;if(key!==selKey){selKey=key;sel=null}
+ let h=head;
+ if(G.phase==='end'){
+  const msg={c:'Civilians win! All murderers are gone.',m:'Murderers win!',d:'The Drunk wins! The mob sent them away.'}[G.winner];
+  h+='<div class="card"><h3>'+msg+'</h3><ul>'+Object.values(G.pl).map(p=>'<li class="'+(p.alive?'':'dead')+'">'+esc(p.name)+' — '+ROLES[p.role].n+', room '+p.room+'</li>').join('')+'</ul></div>';
+ }
+ h+='<div class="card"><div class="mu">Your secret</div><h3>'+R.n+' <span class="tag">'+TEAM[R.t]+'</span> <span class="tag">Room '+me.room+'</span>'+(me.alive?'':' <span class="tag">left the game</span>')+'</h3><div>'+R.d+'</div>';
+ if(R.t==='m')h+='<p>Team: '+Object.values(G.pl).filter(p=>ROLES[p.role].t==='m').map(p=>esc(p.name)+' ('+ROLES[p.role].n+')').join(', ')+'</p>';
+ h+='</div>';
+ if(G.phase==='night')h+=nightUI(me,R);
+ if(G.phase==='day')h+=dayUI(me);
+ const inf=G.info[uid]||[];
+ if(inf.length)h+='<div class="card"><h3>Your intel</h3><ul>'+inf.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>';
+ h+='<div class="card"><h3>Hotel</h3><div class="mu">'+G.n+' floors, 3 rooms each. ⚖ Mob Justice · ∅ Empty · 🔪 Murdered · 💀 Body Found. Marked rooms can’t be chosen for a mob.</div>'+bld(false)+'</div>';
+ h+='<div class="card"><h3>Players</h3>'+Object.values(G.pl).map(p=>'<span class="tag '+(p.alive?'':'dead')+'">'+esc(p.name)+'</span>').join('')+
+  '<h3 style="margin-top:12px">What happened</h3><ul>'+[...G.log].reverse().map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>';
+ if(isHost&&G.phase!=='end')h+='<p><button class="s" data-a="force">Host: force-continue this phase</button></p>';
+ $app.innerHTML=h;
+}
+function nightUI(me,R){
+ const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),done=al.filter(u=>P[u]?.act?.n===G.night).length;
+ let h='<div class="card"><h3>Night '+G.night+' of '+(G.D-1)+'</h3>';
+ if(!me.alive)return h+'<p class="mu">You have left the game. Watching ('+done+'/'+al.length+' ready).</p></div>';
+ if(P[uid]?.act?.n===G.night)return h+'<p>Choice sent. Waiting for others… ('+done+'/'+al.length+')</p></div>';
+ const k=R.k;
+ if(k==='none')h+='<p>Nothing to do tonight. Press the button so nobody can tell who has an ability.</p>';
+ else if(k==='room')h+='<p>Choose a room.</p>'+bld(true,{disable:me.role==='lock'?G.lastLock:null});
+ else if(k==='floor')h+='<p>Choose a floor.</p><div class="row">'+Array.from({length:G.n},(_,i)=>'<button class="s'+(sel===i+1?' on':'')+'" data-a="sel" data-v="'+(i+1)+'">Floor '+(i+1)+'</button>').join('')+'</div>';
+ else if(k==='col')h+='<p>Choose a row.</p><div class="row">'+[1,2,3].map(i=>'<button class="s'+(sel===i?' on':'')+'" data-a="sel" data-v="'+i+'">Row '+i+'</button>').join('')+'</div>';
+ else if(k==='person')h+='<p>Choose a person.</p><div class="row">'+al.filter(u=>u!==uid).map(u=>'<button class="s'+(sel===u?' on':'')+'" data-a="sel" data-v="'+esc(u)+'">'+esc(G.pl[u].name)+'</button>').join('')+'</div>';
+ return h+'<p><button data-a="go" '+(k!=='none'&&sel===null?'disabled':'')+'>Confirm</button></p></div>';
+}
+function dayUI(me){
+ const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),need=Math.ceil(al.length/2);
+ let h='<div class="card"><h3>Day '+G.day+' of '+G.D+'</h3>';
+ if(!me.alive)return h+'<p class="mu">You have left the game. Keep watching.</p></div>';
+ h+='<p class="mu">Talk it out on voice chat. '+need+' of '+al.length+' players must approve a mob justice. The day ends after one mob, or when '+need+' players choose to skip.</p>';
+ if(G.prop){
+  const y=al.filter(u=>P[u]?.vote?.id===G.prop.id&&P[u].vote.y).length,no=al.filter(u=>P[u]?.vote?.id===G.prop.id&&!P[u].vote.y).length;
+  const mv=P[uid]?.vote?.id===G.prop.id?P[uid].vote.y:null;
+  h+='<div class="card"><b>'+esc(G.pl[G.prop.by].name)+'</b> proposes mob justice on <b>room '+G.prop.room+'</b><div class="mu">Yes '+y+' · No '+no+'</div><div class="row">'+
+   '<button class="'+(mv===true?'on':'')+'" data-a="vote" data-v="1">Approve</button><button class="s '+(mv===false?'on':'')+'" data-a="vote" data-v="0">Reject</button></div></div>';
+ }else{
+  h+='<div class="row"><select id="pr">'+bldOpts()+'</select><button data-a="prop">Propose mob justice</button></div>';
+ }
+ const sk=al.filter(u=>P[u]?.skip===G.day).length;
+ return h+'<p><button class="s '+(P[uid]?.skip===G.day?'on':'')+'" data-a="skip">No mob today ('+sk+'/'+need+')</button></p></div>';
+}
+function bldOpts(){let o='';for(let f=1;f<=G.n;f++)for(let c=1;c<=3;c++){const r=f*100+c;if(!(G.st||{})[r])o+='<option>'+r+'</option>'}return o}
+
+$app.addEventListener('click',e=>{
+ const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
+ if(a==='new'||a==='join'){name=document.getElementById('nm').value.trim();if(!name)return alert('Enter a nickname first.');
+  if(a==='new')return startHost(rand(4));const c=document.getElementById('cd').value.trim();if(c.length!==4)return alert('Enter the 4-letter code.');return startClient(c)}
+ if(a==='leave')return leave();
+ if(a==='start')return start();
+ if(a==='force'){force=true;return tick()}
+ if(a==='sel'){sel=isNaN(v)?v:+v;return render()}
+ if(a==='go'){const R=ROLES[G.pl[uid].role];mine={...mine,act:{n:G.night,v:R.k==='none'?0:sel}};sel=null;return push()}
+ if(a==='prop'){const room=+document.getElementById('pr').value,seq=Date.now();
+  mine={...mine,prop:{seq,room},vote:{id:uid+':'+seq,y:true}};return push()}
+ if(a==='vote'){mine={...mine,vote:{id:G.prop.id,y:v==='1'}};return push()}
+ if(a==='skip'){mine={...mine,skip:P[uid]?.skip===G.day?0:G.day};return push()}
+});
+
+/* ---------- boot ---------- */
+(function(){
+ const c=ls('hm_code');
+ if(c&&name){
+  if(ls('hm_host')==='1'){
+   try{const s=JSON.parse(ls('hm_save'));HG=s.HG;HP=s.HP;startHost(c,true);return}catch(e){}
+  }else return startClient(c);
+ }
+ ['hm_code','hm_host'].forEach(k=>ls(k,null));render();
+})();
+</script></body></html>

@@ -31,7 +31,7 @@ input,select{background:var(--card);border:1px solid var(--bd);border-radius:8px
 .err{color:var(--ac)}
 ul{padding-left:20px;margin:.3em 0}.big{font-size:2em;font-weight:700;letter-spacing:.1em}
 .cfg{border-collapse:collapse;margin:6px 0}.cfg td,.cfg th{padding:3px 8px 3px 0;text-align:left}
-.cfg select{width:auto;margin:0;padding:4px 8px}
+.cfg button{padding:2px 12px}.cfg td.n{min-width:2em;text-align:center;font-weight:600}
 </style></head><body><div id="app">Loading…</div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
@@ -48,7 +48,7 @@ civ:{t:'c',k:'none',n:{en:'Civilian',th:'พลเรือน'},d:{en:'No night
 drunk:{t:'d',k:'room',n:{en:'Drunk',th:'คนเมา'},d:{en:'First each night: choose a room and sleep there. You win if the mob sends you away.',th:'ทุกคืนคุณได้เลือกก่อนใคร: เลือกห้องแล้วเข้านอนที่นั่น คุณชนะถ้าถูกฝูงชนลงประชาทัณฑ์ขับไล่ออกจากเกม'}},
 lock:{t:'c',k:'room',n:{en:'Locksmith',th:'ช่างกุญแจ'},d:{en:"Lock one room each night. If the Murderer targets that room, or it is the Murderer's own room, nobody dies tonight. Not the same room two nights in a row.",th:'ล็อกห้องหนึ่งห้องทุกคืน ถ้าฆาตกรเลือกห้องนั้นเป็นเป้าหมาย หรือเป็นห้องของฆาตกรเอง คืนนั้นจะไม่มีใครตาย ห้ามล็อกห้องเดิมสองคืนติดกัน'}},
 house:{t:'c',k:'floor',n:{en:'Housekeeper',th:'แม่บ้าน'},d:{en:'Choose a floor: learn how many people sleep there tonight.',th:'เลือกชั้น: จะรู้ว่าคืนนี้มีคนนอนอยู่ที่ชั้นนั้นกี่คน'}},
-rac:{t:'c',k:'col',n:{en:'Rope Access Cleaner',th:'ช่างทำความสะอาดผนังอาคาร'},d:{en:'Choose a building (A, B or C): learn how many people sleep in it tonight.',th:'เลือกตึก (A, B หรือ C): จะรู้ว่าคืนนี้มีคนนอนอยู่ในตึกนั้นกี่คน'}},
+rac:{t:'c',k:'col',n:{en:'Window Washer',th:'คนเช็ดกระจก'},d:{en:'Choose a building (A, B or C): learn how many people sleep in it tonight.',th:'เลือกตึก (A, B หรือ C): จะรู้ว่าคืนนี้มีคนนอนอยู่ในตึกนั้นกี่คน'}},
 det:{t:'c',k:'person',n:{en:'Detective',th:'นักสืบ'},d:{en:'Choose a person: learn which floor they sleep on.',th:'เลือกคน: จะรู้ว่าคนนั้นนอนอยู่ชั้นไหน'}},
 asst:{t:'m',k:'person',n:{en:'Assistant',th:'ผู้ช่วย'},d:{en:'Choose a person: learn their floor. Your team sees it immediately, before the Murderer acts.',th:'เลือกคน: จะรู้ชั้นที่คนนั้นนอนอยู่ และทีมของคุณจะเห็นข้อมูลนี้ทันทีก่อนฆาตกรลงมือ'}},
 murd:{t:'m',k:'room',n:{en:'Murderer',th:'ฆาตกร'},d:{en:"Last each night, after your team's intel: choose a room. Anyone inside dies, unless a Locksmith locked that room or your own room.",th:'ทุกคืนคุณลงมือเป็นคนสุดท้าย หลังได้ข้อมูลจากทีม: เลือกห้อง ทุกคนในห้องนั้นจะตาย เว้นแต่ช่างกุญแจล็อกห้องนั้นหรือห้องของคุณไว้'}},
@@ -64,13 +64,13 @@ const rl=r=>bn(r%100)+fl(r);       // room label: 101 -> A1, 203 -> C2
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const rand=n=>Array.from({length:n},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('');
 const clone=o=>JSON.parse(JSON.stringify(o));
-const defCfg=()=>{const c={};RK.forEach(r=>c[r]=[0,1]);return c};
-function loadCfg(){try{const c=JSON.parse(ls('hm_cfg'));if(c&&RK.every(r=>Array.isArray(c[r])&&c[r].length===2))return c}catch(e){}return defCfg()}
+const defCfg=()=>{const c={};RK.forEach(r=>c[r]=1);return c};
+const okCfg=c=>c&&RK.every(r=>Number.isInteger(c[r])&&c[r]>=0&&c[r]<=9);
+function loadCfg(){try{const c=JSON.parse(ls('hm_cfg'));if(okCfg(c))return c}catch(e){}return defCfg()}
+const poolSize=cfg=>RK.reduce((s,r)=>s+cfg[r],0);
 function cfgErr(cfg,n){
- for(const r of RK)if(cfg[r][0]>cfg[r][1])return L(rn(ROLES[r])+': min is greater than max.',rn(ROLES[r])+': ค่าต่ำสุดมากกว่าค่าสูงสุด');
- const mn=1+RK.reduce((s,r)=>s+cfg[r][0],0),mx=1+RK.reduce((s,r)=>s+cfg[r][1],0);
- if(n<mn)return L('The minimums need at least '+mn+' players.','ค่าต่ำสุดรวมกันต้องมีผู้เล่นอย่างน้อย '+mn+' คน');
- if(n>mx)return L('The maximums only allow '+mx+' players.','ค่าสูงสุดรวมกันรองรับผู้เล่นได้เพียง '+mx+' คน');
+ const p=poolSize(cfg);
+ if(p<n-1)return L('The role pool has only '+p+' roles; '+n+' players need '+(n-1)+'.','กองบทบาทมีเพียง '+p+' บทบาท แต่ผู้เล่น '+n+' คนต้องใช้ '+(n-1)+' บทบาท');
  return '';
 }
 
@@ -101,7 +101,7 @@ function startHost(c,resume){
  });
 }
 function migrate(){ // fill in fields missing from saves made by older versions
- HG.cfg=HG.cfg||loadCfg();HG.banned=HG.banned||[];
+ if(!okCfg(HG.cfg))HG.cfg=loadCfg();HG.banned=HG.banned||[];
  if(HG.pl){HG.props=HG.props||[];HG.seen=HG.seen||{};if(!HG.lastLock||typeof HG.lastLock!=='object')HG.lastLock={};
   if(HG.phase==='night'&&!HG.np)startNight(HG)}
 }
@@ -246,8 +246,8 @@ function start(){
  const ids=Object.keys(HP).filter(u=>HP[u].name);const n=ids.length;
  if(n<5||n>9)return alert(L('Need 5 to 9 players.','ต้องมีผู้เล่น 5 ถึง 9 คน'));
  const cfg=HG.cfg,err=cfgErr(cfg,n);if(err)return alert(err);
- const roles=['murd'];RK.forEach(r=>{for(let i=0;i<cfg[r][0];i++)roles.push(r)});
- while(roles.length<n){const c=RK.filter(r=>roles.filter(x=>x===r).length<cfg[r][1]);roles.push(c[Math.floor(Math.random()*c.length)])}
+ const pool=[];RK.forEach(r=>{for(let i=0;i<cfg[r];i++)pool.push(r)});
+ const roles=['murd',...shuffle(pool).slice(0,n-1)];
  const rooms=[];for(let f=1;f<=n;f++)for(let c=1;c<=3;c++)rooms.push(f*100+c);
  const rr=shuffle(rooms).slice(0,n),rs=shuffle(roles);
  const g={host:uid,phase:'day',day:1,night:0,n,D:n<=6?3:4,pl:{},st:{},log:[{k:'dayStart',p:{bodies:n-4}}],info:{},seen:{},lastLock:{},props:[],cfg,banned:HG.banned};
@@ -298,11 +298,13 @@ function bld(clickable,opts={}){
 }
 function roster(){return '<ul>'+Object.values(G.pl).map(p=>'<li class="'+(p.alive?'':'dead')+'">'+esc(p.name)+' — '+rn(ROLES[p.role])+', '+L('room','ห้อง')+' '+rl(p.room)+'</li>').join('')+'</ul>'}
 function cfgUI(n){
- const cfg=G.cfg||defCfg(),opt=v=>Array.from({length:10},(_,i)=>'<option'+(i===v?' selected':'')+'>'+i+'</option>').join('');
- let h='<h3 style="margin-top:12px">'+L('Role limits','จำนวนบทบาท')+'</h3><table class="cfg"><tr><th></th><th>'+L('Min','ต่ำสุด')+'</th><th>'+L('Max','สูงสุด')+'</th></tr>'+
-  '<tr><td>'+rn(ROLES.murd)+'</td><td>1</td><td>1</td></tr>';
- RK.forEach(r=>{h+='<tr><td>'+rn(ROLES[r])+'</td>'+[0,1].map(i=>'<td>'+(isHost?'<select data-cfg="'+r+':'+i+'">'+opt(cfg[r][i])+'</select>':cfg[r][i])+'</td>').join('')+'</tr>'});
- h+='</table><p class="mu">'+L('The Murderer is always exactly 1. Other roles are dealt at random within these limits.','ฆาตกรมี 1 คนเสมอ บทบาทอื่นจะสุ่มแจกภายในขอบเขตนี้')+'</p>';
+ const cfg=okCfg(G.cfg)?G.cfg:defCfg();
+ const cell=r=>isHost?'<td><button class="s" data-a="cfg" data-v="'+r+':-1" '+(cfg[r]<=0?'disabled':'')+'>−</button></td><td class="n">'+cfg[r]+'</td><td><button class="s" data-a="cfg" data-v="'+r+':1" '+(cfg[r]>=9?'disabled':'')+'>+</button></td>':'<td class="n">'+cfg[r]+'</td>';
+ let h='<h3 style="margin-top:12px">'+L('Role pool','กองบทบาท')+'</h3><table class="cfg">'+
+  '<tr><td>'+rn(ROLES.murd)+'</td>'+(isHost?'<td></td><td class="n">1</td><td></td>':'<td class="n">1</td>')+'</tr>';
+ RK.forEach(r=>{h+='<tr><td>'+rn(ROLES[r])+'</td>'+cell(r)+'</tr>'});
+ h+='</table><p class="mu">'+L('Pool: '+poolSize(cfg)+' roles · '+n+' players need '+Math.max(0,n-1)+'.','กองบทบาท: '+poolSize(cfg)+' · ผู้เล่น '+n+' คนต้องใช้ '+Math.max(0,n-1))+'<br>'+
+  L('Each number is how many of that role go into the pool. Roles are drawn at random from the pool. The Murderer is always 1.','ตัวเลขคือจำนวนของบทบาทนั้นที่ใส่ลงในกอง บทบาทจะถูกสุ่มจากกองนี้ ฆาตกรมี 1 คนเสมอ')+'</p>';
  return h;
 }
 function render(){
@@ -399,6 +401,8 @@ $app.addEventListener('click',e=>{
  if(a==='leave')return leave();
  if(a==='start')return start();
  if(a==='kick')return kick(v);
+ if(a==='cfg'){if(!isHost||!HG||HG.phase!=='lobby')return;const [r,d]=v.split(':');if(!RK.includes(r))return;
+  HG.cfg[r]=Math.min(9,Math.max(0,HG.cfg[r]+(+d)));ls('hm_cfg',JSON.stringify(HG.cfg));return tick()}
  if(a==='force'){force=true;return tick()}
  if(a==='sel'){sel=isNaN(v)?v:+v;return render()}
  if(a==='go'){const k=nightKind(G.pl[uid]);if(!k)return;mine={...mine,act:{n:G.night,p:G.np,v:k==='none'?0:sel}};sel=null;render();return push()}
@@ -407,10 +411,6 @@ $app.addEventListener('click',e=>{
   mine={...mine,props:[...(mine.props||[]),{seq,room}].slice(-5),votes:{...keepVotes(),[uid+':'+seq]:true}};return push()}
  if(a==='vote'){mine={...mine,votes:{...keepVotes(),[b.dataset.id]:v==='1'}};return push()}
  if(a==='skip'){mine={...mine,skip:P[uid]?.skip===G.day?0:G.day};return push()}
-});
-$app.addEventListener('change',e=>{
- const s=e.target.closest('[data-cfg]');if(!s||!isHost||!HG||HG.phase!=='lobby')return;
- const [r,i]=s.dataset.cfg.split(':');HG.cfg[r][+i]=+s.value;ls('hm_cfg',JSON.stringify(HG.cfg));tick();
 });
 
 /* ---------- boot ---------- */

@@ -3,8 +3,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Hotel Murder</title>
 <style>
-:root{--bg:#f6f3ee;--card:#fff;--tx:#1d1b19;--mu:#6d675f;--ac:#b3261e;--bd:#ddd6cb;--ok:#2e7d4f;color-scheme:light}
-@media(prefers-color-scheme:dark){:root{--bg:#17151a;--card:#232027;--tx:#eee9e2;--mu:#a49d94;--ac:#ff6b60;--bd:#3a353d;--ok:#6fcf97;color-scheme:dark}}
+:root{--bg:#f6f3ee;--card:#fff;--tx:#1d1b19;--mu:#6d675f;--ac:#b3261e;--bd:#ddd6cb;--ok:#2e7d4f;
+ --se:#2e7d4f;--sm:#c62828;--sj:#e06c00;--sb:#8a8580;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#17151a;--card:#232027;--tx:#eee9e2;--mu:#a49d94;--ac:#ff6b60;--bd:#3a353d;--ok:#6fcf97;
+ --se:#2f8a57;--sm:#d64545;--sj:#e8811f;--sb:#615c57;color-scheme:dark}}
 *{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 #app{max-width:760px;margin:0 auto;padding:14px}
 h1{font-family:Georgia,serif;margin:.2em 0}h3{margin:.2em 0 .5em}
@@ -19,10 +21,17 @@ input,select{background:var(--card);border:1px solid var(--bd);border-radius:8px
 .bld{display:grid;gap:4px;max-width:340px}
 .fl{display:grid;grid-template-columns:28px repeat(3,1fr);gap:4px;align-items:center}
 .fl button{padding:7px 0}.fl span{font-size:.8em;color:var(--mu);text-align:center}
-.rm{background:var(--card);color:var(--tx);border:1px solid var(--bd)}.mob{background:var(--mu);color:#fff}
+.rm{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+.st-empty,.st-murdered,.st-mob,.st-body{color:#fff;border:1px solid transparent}
+.st-empty{background:var(--se)}.st-murdered{background:var(--sm)}.st-mob{background:var(--sj)}.st-body{background:var(--sb)}
+.fl button.st-empty:disabled,.fl button.st-murdered:disabled,.fl button.st-mob:disabled,.fl button.st-body:disabled{opacity:1}
 .tag{display:inline-block;padding:2px 9px;border-radius:99px;border:1px solid var(--bd);margin:2px}
+.tag .x{background:none;color:var(--mu);border:0;padding:0 0 0 6px}
 .dead{text-decoration:line-through;color:var(--mu)}
+.err{color:var(--ac)}
 ul{padding-left:20px;margin:.3em 0}.big{font-size:2em;font-weight:700;letter-spacing:.1em}
+.cfg{border-collapse:collapse;margin:6px 0}.cfg td,.cfg th{padding:3px 8px 3px 0;text-align:left}
+.cfg select{width:auto;margin:0;padding:4px 8px}
 </style></head><body><div id="app">Loading…</div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
@@ -35,26 +44,38 @@ let LANG=ls('hm_lang')||'en';
 const L=(en,th)=>LANG==='th'?th:en;
 const ROLES={
 hid:{t:'?',k:'none',n:{en:'?',th:'?'},d:{en:'',th:''}},
-civ:{t:'c',k:'none',n:{en:'Civilian',th:'พลเรือน'},d:{en:'No night ability. Find the murderers.',th:'ไม่มีความสามารถตอนกลางคืน จงตามหาฆาตกร'}},
-drunk:{t:'d',k:'room',n:{en:'Drunk',th:'คนเมา'},d:{en:'Each night choose a room and sleep there. You win if the mob sends you away.',th:'ทุกคืนเลือกห้องแล้วเข้านอนที่นั่น คุณชนะถ้าฝูงชนลงประชาทัณฑ์ขับไล่คุณออกจากเกม'}},
-lock:{t:'c',k:'room',n:{en:'Locksmith',th:'ช่างกุญแจ'},d:{en:"Lock a room: the Murderer cannot enter it tonight. But if you lock the Murderer's own room or the room they target, your action is wasted. Not the same room two nights in a row.",th:'ล็อกห้อง: ฆาตกรจะเข้าห้องนั้นไม่ได้คืนนี้ แต่ถ้าคุณล็อกห้องของฆาตกรเองหรือห้องที่ฆาตกรเลือกเป็นเป้าหมาย การกระทำของคุณจะไร้ผล ห้ามล็อกห้องเดิมสองคืนติดกัน'}},
+civ:{t:'c',k:'none',n:{en:'Civilian',th:'พลเรือน'},d:{en:'No night ability. Find the Murderer.',th:'ไม่มีความสามารถตอนกลางคืน จงตามหาฆาตกร'}},
+drunk:{t:'d',k:'room',n:{en:'Drunk',th:'คนเมา'},d:{en:'First each night: choose a room and sleep there. You win if the mob sends you away.',th:'ทุกคืนคุณได้เลือกก่อนใคร: เลือกห้องแล้วเข้านอนที่นั่น คุณชนะถ้าถูกฝูงชนลงประชาทัณฑ์ขับไล่ออกจากเกม'}},
+lock:{t:'c',k:'room',n:{en:'Locksmith',th:'ช่างกุญแจ'},d:{en:"Lock one room each night. If the Murderer targets that room, or it is the Murderer's own room, nobody dies tonight. Not the same room two nights in a row.",th:'ล็อกห้องหนึ่งห้องทุกคืน ถ้าฆาตกรเลือกห้องนั้นเป็นเป้าหมาย หรือเป็นห้องของฆาตกรเอง คืนนั้นจะไม่มีใครตาย ห้ามล็อกห้องเดิมสองคืนติดกัน'}},
 house:{t:'c',k:'floor',n:{en:'Housekeeper',th:'แม่บ้าน'},d:{en:'Choose a floor: learn how many people sleep there tonight.',th:'เลือกชั้น: จะรู้ว่าคืนนี้มีคนนอนอยู่ที่ชั้นนั้นกี่คน'}},
-rac:{t:'c',k:'col',n:{en:'Rope Access Cleaner',th:'ช่างทำความสะอาดผนังอาคาร'},d:{en:'Choose a row (the same room position on every floor): learn how many people sleep there tonight.',th:'เลือกแถว (ตำแหน่งห้องเดียวกันในทุกชั้น): จะรู้ว่าคืนนี้มีคนนอนอยู่ในแถวนั้นกี่คน'}},
+rac:{t:'c',k:'col',n:{en:'Rope Access Cleaner',th:'ช่างทำความสะอาดผนังอาคาร'},d:{en:'Choose a building (A, B or C): learn how many people sleep in it tonight.',th:'เลือกตึก (A, B หรือ C): จะรู้ว่าคืนนี้มีคนนอนอยู่ในตึกนั้นกี่คน'}},
 det:{t:'c',k:'person',n:{en:'Detective',th:'นักสืบ'},d:{en:'Choose a person: learn which floor they sleep on.',th:'เลือกคน: จะรู้ว่าคนนั้นนอนอยู่ชั้นไหน'}},
-asst:{t:'m',k:'person',n:{en:'Assistant',th:'ผู้ช่วย'},d:{en:'Choose a person: learn their floor. Shared with your team.',th:'เลือกคน: จะรู้ชั้นที่คนนั้นนอนอยู่ และข้อมูลนี้จะถูกแชร์กับทีมของคุณ'}},
-murd:{t:'m',k:'room',n:{en:'Murderer',th:'ฆาตกร'},d:{en:'Choose a room: anyone inside dies, unless the Locksmith locked it.',th:'เลือกห้อง: ทุกคนในห้องนั้นจะตาย เว้นแต่ช่างกุญแจจะล็อกห้องนั้นไว้'}},
+asst:{t:'m',k:'person',n:{en:'Assistant',th:'ผู้ช่วย'},d:{en:'Choose a person: learn their floor. Your team sees it immediately, before the Murderer acts.',th:'เลือกคน: จะรู้ชั้นที่คนนั้นนอนอยู่ และทีมของคุณจะเห็นข้อมูลนี้ทันทีก่อนฆาตกรลงมือ'}},
+murd:{t:'m',k:'room',n:{en:'Murderer',th:'ฆาตกร'},d:{en:"Last each night, after your team's intel: choose a room. Anyone inside dies, unless a Locksmith locked that room or your own room.",th:'ทุกคืนคุณลงมือเป็นคนสุดท้าย หลังได้ข้อมูลจากทีม: เลือกห้อง ทุกคนในห้องนั้นจะตาย เว้นแต่ช่างกุญแจล็อกห้องนั้นหรือห้องของคุณไว้'}},
 wit:{t:'c',k:'floor',n:{en:'Witness',th:'พยาน'},d:{en:'Choose a floor: if a room there is targeted by the murderer, learn whether the murderer sleeps on that floor, a lower or a higher one.',th:'เลือกชั้น: ถ้าฆาตกรเลือกเป้าหมายเป็นห้องในชั้นนั้น จะรู้ว่าฆาตกรนอนอยู่ชั้นเดียวกัน ชั้นที่ต่ำกว่า หรือชั้นที่สูงกว่า'}}};
+const RK=['civ','drunk','lock','house','rac','det','asst','wit']; // configurable roles (Murderer is always exactly 1)
 const rn=r=>r.n[LANG],rd=r=>r.d[LANG];
 const TEAM={c:{en:'Civilians',th:'พลเรือน'},m:{en:'Murderers',th:'ฆาตกร'},d:{en:'Drunk',th:'คนเมา'}};
 const tm=k=>TEAM[k][LANG];
-const SL={mob:{g:'⚖',n:{en:'Mob Justice',th:'ประชาทัณฑ์'}},empty:{g:'∅',n:{en:'Empty',th:'ห้องว่าง'}},murdered:{g:'🔪',n:{en:'Murdered',th:'ถูกฆาตกรรม'}},body:{g:'💀',n:{en:'Body Found',th:'พบศพ'}}};
+const SL={empty:{g:'∅',n:{en:'Empty',th:'ห้องว่าง'}},murdered:{g:'🔪',n:{en:'Murdered',th:'ถูกฆาตกรรม'}},mob:{g:'⚖',n:{en:'Mob Justice',th:'ประชาทัณฑ์'}},body:{g:'💀',n:{en:'Body Found',th:'พบศพ'}}};
 const fl=r=>Math.floor(r/100);
+const bn=c=>'ABC'[c-1];            // building letter
+const rl=r=>bn(r%100)+fl(r);       // room label: 101 -> A1, 203 -> C2
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const rand=n=>Array.from({length:n},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('');
 const clone=o=>JSON.parse(JSON.stringify(o));
+const defCfg=()=>{const c={};RK.forEach(r=>c[r]=[0,1]);return c};
+function loadCfg(){try{const c=JSON.parse(ls('hm_cfg'));if(c&&RK.every(r=>Array.isArray(c[r])&&c[r].length===2))return c}catch(e){}return defCfg()}
+function cfgErr(cfg,n){
+ for(const r of RK)if(cfg[r][0]>cfg[r][1])return L(rn(ROLES[r])+': min is greater than max.',rn(ROLES[r])+': ค่าต่ำสุดมากกว่าค่าสูงสุด');
+ const mn=1+RK.reduce((s,r)=>s+cfg[r][0],0),mx=1+RK.reduce((s,r)=>s+cfg[r][1],0);
+ if(n<mn)return L('The minimums need at least '+mn+' players.','ค่าต่ำสุดรวมกันต้องมีผู้เล่นอย่างน้อย '+mn+' คน');
+ if(n>mx)return L('The maximums only allow '+mx+' players.','ค่าสูงสุดรวมกันรองรับผู้เล่นได้เพียง '+mx+' คน');
+ return '';
+}
 
 let uid=ls('hm_uid')||('u'+rand(10)),name=ls('hm_name')||'',code='',isHost=false,peer,conn,conns={};
-let HG=null,HP={},force=false;            // host-only: true state
+let HG=null,HP={},force=false,tmr=null;   // host-only: true state
 let G=null,P={},mine={},sel=null,selKey='';  // what the UI shows
 ls('hm_uid',uid);
 
@@ -64,18 +85,25 @@ function startHost(c,resume){
  peer=new Peer('hm-'+code);
  peer.on('error',e=>{if(e.type==='unavailable-id'&&!resume)startHost(rand(4));else alert(L('Network error: ','เกิดข้อผิดพลาดเครือข่าย: ')+e.type)});
  peer.on('open',()=>{
-  if(!resume){HG={host:uid,phase:'lobby'};HP={[uid]:{name}}}
+  if(!resume){HG={host:uid,phase:'lobby',cfg:loadCfg(),banned:[]};HP={[uid]:{name}}}
+  else migrate();
   mine=HP[uid];tick();
  });
  peer.on('connection',cn=>{
   cn.on('data',m=>{
    if(m.t==='join'){
+    if((HG.banned||[]).includes(m.uid))return cn.send({t:'err',m:'kicked'});
     const known=HP[m.uid]||(HG.pl&&HG.pl[m.uid]);
     if(!known&&(HG.phase!=='lobby'||Object.keys(HP).length>=9))return cn.send({t:'err',m:HG.phase!=='lobby'?'started':'full'});
     cn.u=m.uid;conns[m.uid]=cn;HP[m.uid]=HP[m.uid]||{};HP[m.uid].name=m.name;tick();
-   }else if(cn.u)onMsg(cn.u,m);
+   }else if(cn.u&&conns[cn.u]===cn)onMsg(cn.u,m);
   });
  });
+}
+function migrate(){ // fill in fields missing from saves made by older versions
+ HG.cfg=HG.cfg||loadCfg();HG.banned=HG.banned||[];
+ if(HG.pl){HG.props=HG.props||[];HG.seen=HG.seen||{};if(!HG.lastLock||typeof HG.lastLock!=='object')HG.lastLock={};
+  if(HG.phase==='night'&&!HG.np)startNight(HG)}
 }
 function startClient(c){
  code=c.toUpperCase().trim();ls('hm_code',code);ls('hm_host','0');ls('hm_name',name);isHost=false;
@@ -89,107 +117,141 @@ function connect(){
  conn.on('open',()=>conn.send({t:'join',uid,name}));
  conn.on('data',m=>{
   if(m.t==='s'){G=m.G;P=m.P;if(!mine.name)mine={...(P[uid]||{}),name};render()}
-  else if(m.t==='err'){alert(m.m==='started'?L('This game has already started.','เกมนี้เริ่มไปแล้ว'):L('The room is full.','ห้องนี้เต็มแล้ว'));leave()}
+  else if(m.t==='err'){alert({started:L('This game has already started.','เกมนี้เริ่มไปแล้ว'),full:L('The room is full.','ห้องนี้เต็มแล้ว'),kicked:L('The host removed you from this room.','คุณถูกโฮสต์เชิญออกจากห้องนี้')}[m.m]);leave()}
  });
  conn.on('close',()=>{G=null;render();setTimeout(()=>{if(peer&&!peer.destroyed)connect()},2000)});
 }
 function push(){if(isHost)onMsg(uid,{t:'mine',m:mine});else if(conn&&conn.open)conn.send({t:'mine',m:mine})}
 function leave(){['hm_code','hm_host','hm_save'].forEach(k=>ls(k,null));location.reload()}
+function kick(u){
+ if(!isHost||HG.phase!=='lobby'||u===uid)return;
+ HG.banned.push(u);delete HP[u];const c=conns[u];delete conns[u];
+ if(c){try{c.send({t:'err',m:'kicked'})}catch(e){}setTimeout(()=>{try{c.close()}catch(e){}},500)}
+ tick();
+}
 
 /* ---------- host engine ---------- */
 function onMsg(u,m){
- if(m.t==='mine'&&HP[u]){const x=m.m||{};HP[u]={name:HP[u].name,act:x.act,vote:x.vote,prop:x.prop,skip:x.skip};tick()}
+ if(m.t==='mine'&&HP[u]){const x=m.m||{};HP[u]={name:HP[u].name,act:x.act,votes:x.votes,props:x.props,skip:x.skip};tick()}
 }
 function sg(u){ // what player u may see
  const o=clone(HG),end=HG.phase==='end',me=HG.pl&&HG.pl[u],mt=me&&ROLES[me.role].t==='m';
  const omni=end||(me&&!me.alive); // dead players (and end-of-game) see everything
- delete o.seen;o.info=omni?(HG.info||{}):{[u]:(HG.info||{})[u]||[]};o.lastLock=me&&me.role==='lock'?HG.lastLock:null;
+ ['seen','dpos','acts','wait','ainfo','banned','lastLock'].forEach(k=>delete o[k]);
+ o.info=omni?(HG.info||{}):{[u]:(HG.info||{})[u]||[]};
+ o.lastLock=me&&me.role==='lock'?(HG.lastLock||{})[u]||null:null;
  if(HG.pl){o.pl={};for(const k in HG.pl){const p=HG.pl[k],show=omni||k===u,pmt=mt&&ROLES[p.role].t==='m';
   o.pl[k]={name:p.name,alive:p.alive,role:show||pmt?p.role:'hid',room:show?p.room:0}}}
  return o;
 }
-function sp(){const o={};for(const k in HP){const p=HP[k];o[k]={name:p.name};if(p.act)o[k].act={n:p.act.n};if(p.vote)o[k].vote=p.vote;if(p.skip)o[k].skip=p.skip}return o}
-function tick(){let i=0;while(step()&&i++<20);broadcast()}
+function sp(){ // public per-player info. Night actions are shown only for step 2 (everyone acts then).
+ const o={};for(const k in HP){const p=HP[k];o[k]={name:p.name};
+  if(p.act&&p.act.p===2)o[k].act={n:p.act.n,p:2};if(p.votes)o[k].votes=p.votes;if(p.skip)o[k].skip=p.skip}
+ return o;
+}
+function tick(){
+ let i=0;while(step()&&i++<20);force=false;broadcast();
+ clearTimeout(tmr);
+ if(HG&&HG.phase==='night'&&HG.wait)tmr=setTimeout(tick,Math.max(0,HG.wait-Date.now())+50);
+}
 function broadcast(){
  ls('hm_save',JSON.stringify({HG,HP}));
  for(const u in conns){try{if(conns[u].open)conns[u].send({t:'s',G:sg(u),P:sp()})}catch(e){}}
  G=sg(uid);P=sp();if(HP[uid])mine={...HP[uid],...mine,name};render();
 }
+const alive=g=>Object.keys(g.pl).filter(u=>g.pl[u].alive);
+const isM=(g,u)=>ROLES[g.pl[u].role].t==='m';
+const posOf=(g,u)=>g.dpos&&g.dpos[u]!=null?g.dpos[u]:g.pl[u].room; // tonight's sleeping room (Drunk may move)
+const addInfo=(g,u,k,p)=>{(g.info[u]=g.info[u]||[]).push({n:g.night,k,p})};
 function step(){
  if(!HG||HG.phase==='lobby'||HG.phase==='end')return false;
  const g=clone(HG);let ch=false;
- const al=alive(g),A=u=>HP[u]||{};
+ const al=alive(g),A=u=>HP[u]||{},has=r=>al.filter(u=>g.pl[u].role===r);
  if(g.phase==='night'){
-  if(force||al.every(u=>A(u).act?.n===g.night)){force=false;resolve(g);ch=true}
- }else if(g.phase==='day'){
-  const need=Math.ceil(al.length/2);
-  if(g.prop){
-   const y=al.filter(u=>A(u).vote?.id===g.prop.id&&A(u).vote.y).length;
-   const no=al.filter(u=>A(u).vote?.id===g.prop.id&&!A(u).vote.y).length;
-   if(y>=need){execMob(g);ch=true}
-   else if(no>al.length-need){g.log.push({k:'mobRejected',p:{room:g.prop.room}});g.prop=null;ch=true}
-  }else{
-   for(const u of al){const p=A(u).prop;
-    if(p&&p.seq>(g.seen[u]||0)){g.seen[u]=p.seq;g.prop={id:u+':'+p.seq,room:p.room,by:u};ch=true;break}}
+  const N=g.night,act=u=>{const a=A(u).act;return a&&a.n===N&&a.p===g.np?a:null};
+  if(g.np===1){ // Drunk(s) move
+   const dr=has('drunk');
+   if(dr.length?(force||dr.every(act)):(force||Date.now()>=g.wait)){
+    dr.forEach(u=>{const a=act(u);if(a&&a.v)g.dpos[u]=a.v});
+    force=false;g.np=2;g.wait=0;ch=true}
+  }else if(g.np===2){ // everyone else; Assistant intel is shared with the team immediately
+   const team=al.filter(u=>isM(g,u));
+   has('asst').forEach(u=>{const a=act(u);if(a&&!g.ainfo[u]){g.ainfo[u]=1;ch=true;
+    if(g.pl[a.v]&&g.pl[a.v].alive)team.forEach(x=>addInfo(g,x,'infoAsst',{name:g.pl[a.v].name,floor:fl(posOf(g,a.v))}))}});
+   if(force||al.every(act)){al.forEach(u=>{const a=act(u);if(a)g.acts[u]=a.v});force=false;g.np=3;ch=true}
+  }else{ // Murderer acts last
+   const m=has('murd')[0],a=m&&act(m);
+   if(force||!m||a){force=false;resolve(g,a?a.v:null);ch=true}
   }
-  if(!ch&&(force||al.filter(u=>A(u).skip===g.day).length>=need)){force=false;g.log.push({k:'noMob'});endDay(g);ch=true}
+ }else if(g.phase==='day'){
+  for(const u of al)for(const p of (A(u).props||[])){
+   if(p.seq>(g.seen[u]||0)){g.seen[u]=p.seq;ch=true;
+    if(!g.st[p.room]&&!g.props.some(x=>x.room===p.room)&&fl(p.room)>=1&&fl(p.room)<=g.n)g.props.push({id:u+':'+p.seq,room:p.room,by:u})}}
+  for(const pr of [...g.props]){
+   const vs=al.map(u=>(A(u).votes||{})[pr.id]);
+   if(vs.every(v=>v===true||v===false)){ch=true;
+    if(vs.filter(v=>v).length*2>al.length){execMob(g,pr);break}
+    g.log.push({k:'mobRejected',p:{room:pr.room}});g.props=g.props.filter(x=>x!==pr)}
+  }
+  if(g.phase==='day'&&(force||al.filter(u=>A(u).skip===g.day).length*2>al.length)){force=false;g.log.push({k:'noMob'});endDay(g);ch=true}
  }
  if(ch)HG=g;return ch;
 }
-const alive=g=>Object.keys(g.pl).filter(u=>g.pl[u].alive);
 function checkWin(g){
- const al=alive(g),m=al.filter(u=>ROLES[g.pl[u].role].t==='m').length;
- if(m===0)g.winner='c';else if(m*2>al.length)g.winner='m';
+ const al=alive(g),m=al.filter(u=>isM(g,u)).length;
+ if(!al.some(u=>g.pl[u].role==='murd'))g.winner='c';else if(m*2>al.length)g.winner='m';
  if(g.winner)g.phase='end';
+}
+function startNight(g){
+ g.phase='night';g.night=g.day;g.np=1;g.dpos={};g.acts={};g.ainfo={};g.props=[];
+ g.wait=alive(g).some(u=>g.pl[u].role==='drunk')?0:Date.now()+3000+Math.floor(Math.random()*2000); // fake Drunk step
 }
 function endDay(g){
  if(g.winner)return;
  if(g.day>=g.D){g.winner='m';g.phase='end'}
- else{g.phase='night';g.night=g.day;g.prop=null}
+ else startNight(g);
 }
-function execMob(g){
- const r=g.prop.room,v=alive(g).find(u=>g.pl[u].room===r);g.st[r]=v?'mob':'empty';g.prop=null;
+function execMob(g,pr){
+ const r=pr.room,v=alive(g).find(u=>g.pl[u].room===r);g.st[r]=v?'mob':'empty';g.props=[];
  if(v){g.pl[v].alive=false;g.log.push({k:'mobHit',p:{room:r,name:g.pl[v].name}});
   if(g.pl[v].role==='drunk'){g.winner='d';g.phase='end';return}
   checkWin(g)}
  else g.log.push({k:'mobEmpty',p:{room:r}});
  endDay(g);
 }
-function resolve(g){
- const al=alive(g),N=g.night,A=u=>u&&HP[u]?.act?.n===N?HP[u].act.v:null;
- const who=r=>al.find(u=>g.pl[u].role===r),pos={};al.forEach(u=>pos[u]=g.pl[u].room);
- const add=(u,k,p)=>{if(u)(g.info[u]=g.info[u]||[]).push({n:N,k,p})};
- const team=al.filter(u=>ROLES[g.pl[u].role].t==='m');
- const d=who('drunk');if(d&&A(d))pos[d]=A(d);
- const l=who('lock');let lock=null;
- if(l){lock=A(l);if(lock===g.lastLock)lock=null;g.lastLock=lock}
- const h=who('house'),hv=A(h);if(hv)add(h,'infoFloor',{floor:hv,count:al.filter(u=>fl(pos[u])===hv).length});
- const r=who('rac'),rv=A(r);if(rv)add(r,'infoRow',{row:rv,count:al.filter(u=>pos[u]%100===rv).length});
- const dt=who('det'),dv=A(dt);if(dv&&pos[dv]!==undefined)add(dt,'infoDet',{name:g.pl[dv].name,floor:fl(pos[dv])});
- const as=who('asst'),av=A(as);
- if(av&&pos[av]!==undefined)team.forEach(u=>add(u,'infoAsst',{name:g.pl[av].name,floor:fl(pos[av])}));
- const m=who('murd'),t=A(m);
- if(m&&lock!==null&&(lock===t||lock===pos[m]))lock=null; // locking the Murderer's own room or their target wastes the Locksmith's action
+function resolve(g,t){
+ const al=alive(g),N=g.night,pos={},has=r=>al.filter(u=>g.pl[u].role===r),V=u=>g.acts[u];
+ al.forEach(u=>pos[u]=posOf(g,u));
+ const team=al.filter(u=>isM(g,u));
+ has('house').forEach(u=>{const v=V(u);if(v)addInfo(g,u,'infoFloor',{floor:v,count:al.filter(x=>fl(pos[x])===v).length})});
+ has('rac').forEach(u=>{const v=V(u);if(v)addInfo(g,u,'infoRow',{row:v,count:al.filter(x=>pos[x]%100===v).length})});
+ has('det').forEach(u=>{const v=V(u);if(v&&pos[v]!==undefined)addInfo(g,u,'infoDet',{name:g.pl[v].name,floor:fl(pos[v])})});
+ const locks=[];
+ has('lock').forEach(u=>{const v=V(u)||null;if(v&&v!==g.lastLock[u])locks.push(v);g.lastLock[u]=v});
+ const m=has('murd')[0];
+ const blocked=!!(m&&t&&locks.some(x=>x===t||x===pos[m])); // locked target room, or the Murderer locked in
  let vic=[];
- if(m&&t){if(t===lock)team.forEach(u=>add(u,'infoLocked',{room:t}));
-  else{vic=al.filter(u=>pos[u]===t);team.forEach(u=>add(u,vic.length?'infoMurdDied':'infoMurdEmpty',{room:t,names:vic.map(x=>g.pl[x].name)}))}}
- const w=who('wit'),wf=A(w);
- if(w&&wf){if(m&&t&&fl(t)===wf){const mf=fl(pos[m]);add(w,'infoWitHit',{floor:wf,rel:mf===wf?'same':mf<wf?'lower':'higher'})}
-  else add(w,'infoWitMiss',{floor:wf})}
+ if(m&&t){if(blocked)team.forEach(u=>addInfo(g,u,'infoLocked',{room:t}));
+  else{vic=al.filter(u=>pos[u]===t);team.forEach(u=>addInfo(g,u,vic.length?'infoMurdDied':'infoMurdEmpty',{room:t,names:vic.map(x=>g.pl[x].name)}))}}
+ has('wit').forEach(u=>{const wf=V(u);if(!wf)return;
+  if(m&&t&&fl(t)===wf){const mf=fl(pos[m]);addInfo(g,u,'infoWitHit',{floor:wf,rel:mf===wf?'same':mf<wf?'lower':'higher'})}
+  else addInfo(g,u,'infoWitMiss',{floor:wf})});
  vic.forEach(u=>g.pl[u].alive=false);
- if(m&&t&&t!==lock)g.st[t]=vic.length?'murdered':'empty';
+ if(m&&t&&!blocked){if(vic.length)g.st[t]='murdered';else if(!g.st[t])g.st[t]='empty'}
  g.log.push({k:'nightResult',p:{n:N,names:vic.map(u=>g.pl[u].name)}});
- g.phase='day';g.day=N+1;g.prop=null;checkWin(g);
+ delete g.dpos;delete g.acts;delete g.ainfo;g.wait=0;
+ g.phase='day';g.day=N+1;g.props=[];checkWin(g);
 }
 function start(){
  const ids=Object.keys(HP).filter(u=>HP[u].name);const n=ids.length;
  if(n<5||n>9)return alert(L('Need 5 to 9 players.','ต้องมีผู้เล่น 5 ถึง 9 คน'));
+ const cfg=HG.cfg,err=cfgErr(cfg,n);if(err)return alert(err);
+ const roles=['murd'];RK.forEach(r=>{for(let i=0;i<cfg[r][0];i++)roles.push(r)});
+ while(roles.length<n){const c=RK.filter(r=>roles.filter(x=>x===r).length<cfg[r][1]);roles.push(c[Math.floor(Math.random()*c.length)])}
  const rooms=[];for(let f=1;f<=n;f++)for(let c=1;c<=3;c++)rooms.push(f*100+c);
- const rr=shuffle(rooms).slice(0,n);
- const pool=shuffle(['civ','drunk','lock','house','rac','det','asst','wit']).slice(0,n-1);
- const roles=shuffle(['murd',...pool]);
- const g={host:uid,phase:'day',day:1,night:0,n,D:n<=6?3:4,pl:{},st:{},log:[{k:'dayStart',p:{bodies:n-4}}],info:{},seen:{},lastLock:null,prop:null};
- shuffle(ids).forEach((u,i)=>g.pl[u]={name:HP[u].name,room:rr[i],role:roles[i],alive:true});
+ const rr=shuffle(rooms).slice(0,n),rs=shuffle(roles);
+ const g={host:uid,phase:'day',day:1,night:0,n,D:n<=6?3:4,pl:{},st:{},log:[{k:'dayStart',p:{bodies:n-4}}],info:{},seen:{},lastLock:{},props:[],cfg,banned:HG.banned};
+ shuffle(ids).forEach((u,i)=>g.pl[u]={name:HP[u].name,room:rr[i],role:rs[i],alive:true});
  shuffle(rooms.filter(r=>!rr.includes(r))).slice(0,n-4).forEach(r=>g.st[r]='body');
  HG=g;tick();
 }
@@ -198,10 +260,10 @@ function start(){
 function renderLog(e){
  switch(e.k){
   case 'dayStart':return L('Day 1 begins. '+e.p.bodies+' room(s) have a body found. Talk, then decide whether to hold a mob.','วันที่ 1 เริ่มต้น มี '+e.p.bodies+' ห้องที่พบศพ พูดคุยกันแล้วตัดสินใจว่าจะลงประชาทัณฑ์หรือไม่');
-  case 'mobRejected':return L('Mob justice on room '+e.p.room+' was rejected.','การลงประชาทัณฑ์ที่ห้อง '+e.p.room+' ถูกปฏิเสธ');
+  case 'mobRejected':return L('Mob justice on room '+rl(e.p.room)+' was rejected.','การลงประชาทัณฑ์ที่ห้อง '+rl(e.p.room)+' ถูกปฏิเสธ');
   case 'noMob':return L('The day passes without a mob.','วันนี้ผ่านไปโดยไม่มีการลงประชาทัณฑ์');
-  case 'mobHit':return L('Mob justice on room '+e.p.room+': '+esc(e.p.name)+' leaves the game.','การลงประชาทัณฑ์ที่ห้อง '+e.p.room+': '+esc(e.p.name)+' ออกจากเกม');
-  case 'mobEmpty':return L('Mob justice on room '+e.p.room+': it was empty.','การลงประชาทัณฑ์ที่ห้อง '+e.p.room+': ห้องว่างเปล่า');
+  case 'mobHit':return L('Mob justice on room '+rl(e.p.room)+': '+esc(e.p.name)+' leaves the game.','การลงประชาทัณฑ์ที่ห้อง '+rl(e.p.room)+': '+esc(e.p.name)+' ออกจากเกม');
+  case 'mobEmpty':return L('Mob justice on room '+rl(e.p.room)+': it was empty.','การลงประชาทัณฑ์ที่ห้อง '+rl(e.p.room)+': ห้องว่างเปล่า');
   case 'nightResult':return e.p.names.length?L('Night '+e.p.n+': '+e.p.names.map(esc).join(', ')+' left the game.','คืนที่ '+e.p.n+': '+e.p.names.map(esc).join(', ')+' ออกจากเกม'):L('Night '+e.p.n+': nobody left the game.','คืนที่ '+e.p.n+': ไม่มีใครออกจากเกม');
  }
  return '';
@@ -211,12 +273,12 @@ function renderInfo(e){
  let s='';
  switch(e.k){
   case 'infoFloor':s=L('Floor '+e.p.floor+' has '+e.p.count+' people.','ชั้น '+e.p.floor+' มีคนอยู่ '+e.p.count+' คน');break;
-  case 'infoRow':s=L('Row '+e.p.row+' has '+e.p.count+' people.','แถว '+e.p.row+' มีคนอยู่ '+e.p.count+' คน');break;
+  case 'infoRow':s=L('Building '+bn(e.p.row)+' has '+e.p.count+' people.','ตึก '+bn(e.p.row)+' มีคนอยู่ '+e.p.count+' คน');break;
   case 'infoDet':s=L(esc(e.p.name)+' sleeps on floor '+e.p.floor+'.',esc(e.p.name)+' นอนอยู่ชั้น '+e.p.floor);break;
   case 'infoAsst':s=L('Assistant: '+esc(e.p.name)+' sleeps on floor '+e.p.floor+'.','ผู้ช่วย: '+esc(e.p.name)+' นอนอยู่ชั้น '+e.p.floor);break;
-  case 'infoLocked':s=L('Room '+e.p.room+' was locked. Nothing happened.','ห้อง '+e.p.room+' ถูกล็อกไว้ ไม่มีอะไรเกิดขึ้น');break;
-  case 'infoMurdDied':s=L('Room '+e.p.room+': '+e.p.names.map(esc).join(', ')+' died.','ห้อง '+e.p.room+': '+e.p.names.map(esc).join(', ')+' เสียชีวิต');break;
-  case 'infoMurdEmpty':s=L('Room '+e.p.room+' was empty.','ห้อง '+e.p.room+' ว่างเปล่า');break;
+  case 'infoLocked':s=L('Room '+rl(e.p.room)+': a lock stopped the murder. Nothing happened.','ห้อง '+rl(e.p.room)+': กุญแจขัดขวางการฆาตกรรม ไม่มีอะไรเกิดขึ้น');break;
+  case 'infoMurdDied':s=L('Room '+rl(e.p.room)+': '+e.p.names.map(esc).join(', ')+' died.','ห้อง '+rl(e.p.room)+': '+e.p.names.map(esc).join(', ')+' เสียชีวิต');break;
+  case 'infoMurdEmpty':s=L('Room '+rl(e.p.room)+' was empty.','ห้อง '+rl(e.p.room)+' ว่างเปล่า');break;
   case 'infoWitHit':{const rel={same:L('this floor','ชั้นนี้'),lower:L('a lower floor','ชั้นที่ต่ำกว่า'),higher:L('a higher floor','ชั้นที่สูงกว่า')}[e.p.rel];
    s=L('A room on floor '+e.p.floor+' was targeted. The murderer sleeps on '+rel+'.','ห้องหนึ่งในชั้น '+e.p.floor+' ถูกเลือกเป็นเป้าหมาย ฆาตกรนอนอยู่'+rel);break}
   case 'infoWitMiss':s=L('No room on floor '+e.p.floor+' was targeted.','ไม่มีห้องในชั้น '+e.p.floor+' ถูกเลือกเป็นเป้าหมาย');break;
@@ -226,15 +288,23 @@ function renderInfo(e){
 
 /* ---------- UI ---------- */
 function bld(clickable,opts={}){
- let h='<div class="bld">';
- for(let f=G.n;f>=1;f--){h+='<div class="fl"><span>F'+f+'</span>';
+ let h='<div class="bld"><div class="fl"><span></span><span>A</span><span>B</span><span>C</span></div>';
+ for(let f=G.n;f>=1;f--){h+='<div class="fl"><span>'+f+'</span>';
   for(let c=1;c<=3;c++){const r=f*100+c,m=(G.st||{})[r];
    const dis=opts.disable===r||!clickable;
-   h+='<button title="'+(m?SL[m].n[LANG]:'')+'" class="'+(m?'mob':'rm')+(sel===r?' on':'')+'" '+(dis?'disabled ':'')+'data-a="sel" data-v="'+r+'">'+r+(m?' '+SL[m].g:'')+'</button>'}
+   h+='<button title="'+(m?SL[m].n[LANG]:'')+'" class="'+(m?'st-'+m:'rm')+(sel===r?' on':'')+'" '+(dis?'disabled ':'')+'data-a="sel" data-v="'+r+'">'+rl(r)+(m?' '+SL[m].g:'')+'</button>'}
   h+='</div>'}
  return h+'</div>';
 }
-function roster(){return '<ul>'+Object.values(G.pl).map(p=>'<li class="'+(p.alive?'':'dead')+'">'+esc(p.name)+' — '+rn(ROLES[p.role])+', '+L('room','ห้อง')+' '+p.room+'</li>').join('')+'</ul>'}
+function roster(){return '<ul>'+Object.values(G.pl).map(p=>'<li class="'+(p.alive?'':'dead')+'">'+esc(p.name)+' — '+rn(ROLES[p.role])+', '+L('room','ห้อง')+' '+rl(p.room)+'</li>').join('')+'</ul>'}
+function cfgUI(n){
+ const cfg=G.cfg||defCfg(),opt=v=>Array.from({length:10},(_,i)=>'<option'+(i===v?' selected':'')+'>'+i+'</option>').join('');
+ let h='<h3 style="margin-top:12px">'+L('Role limits','จำนวนบทบาท')+'</h3><table class="cfg"><tr><th></th><th>'+L('Min','ต่ำสุด')+'</th><th>'+L('Max','สูงสุด')+'</th></tr>'+
+  '<tr><td>'+rn(ROLES.murd)+'</td><td>1</td><td>1</td></tr>';
+ RK.forEach(r=>{h+='<tr><td>'+rn(ROLES[r])+'</td>'+[0,1].map(i=>'<td>'+(isHost?'<select data-cfg="'+r+':'+i+'">'+opt(cfg[r][i])+'</select>':cfg[r][i])+'</td>').join('')+'</tr>'});
+ h+='</table><p class="mu">'+L('The Murderer is always exactly 1. Other roles are dealt at random within these limits.','ฆาตกรมี 1 คนเสมอ บทบาทอื่นจะสุ่มแจกภายในขอบเขตนี้')+'</p>';
+ return h;
+}
 function render(){
  document.documentElement.lang=LANG;
  if(!ls('hm_code')){
@@ -244,22 +314,24 @@ function render(){
  const head='<div class="row" style="justify-content:space-between"><h1>Hotel Murder</h1><div><span class="tag">'+L('Code','รหัส')+' <b>'+esc(code)+'</b></span> <button class="s" data-a="lang">'+L('ไทย','EN')+'</button> <button class="s" data-a="leave">'+L('Leave','ออก')+'</button></div></div>';
  if(!G){$app.innerHTML=head+'<div class="card">'+L('Connecting to the host… If this never finishes, check the code or ask the host to keep their tab open.','กำลังเชื่อมต่อกับโฮสต์… ถ้าไม่เสร็จสักที ให้ตรวจสอบรหัสหรือขอให้โฮสต์เปิดแท็บไว้')+'</div>';return}
  if(G.phase==='lobby'){
-  const ids=Object.keys(P).filter(u=>P[u].name);
+  const ids=Object.keys(P).filter(u=>P[u].name),n=ids.length;
+  const err=n<5||n>9?L('Need 5 to 9 players.','ต้องมีผู้เล่น 5 ถึง 9 คน'):cfgErr(G.cfg||defCfg(),n);
   $app.innerHTML=head+'<div class="card"><div class="big">'+esc(code)+'</div><p class="mu">'+L('Share this code. Friends open this page and join. 5–9 players.','แชร์รหัสนี้ให้เพื่อน เปิดหน้านี้แล้วเข้าร่วมได้เลย ต้องมี 5–9 คน')+'</p>'+
-  '<h3>'+L('Players','ผู้เล่น')+' ('+ids.length+')</h3>'+ids.map(u=>'<span class="tag">'+esc(P[u].name)+(u===G.host?' ★':'')+'</span>').join('')+
-  '<p>'+(isHost?'<button data-a="start" '+(ids.length<5||ids.length>9?'disabled':'')+'>'+L('Start game','เริ่มเกม')+'</button>':'<span class="mu">'+L('Waiting for the host to start…','กำลังรอโฮสต์เริ่มเกม…')+'</span>')+'</p></div>';return}
+  '<h3>'+L('Players','ผู้เล่น')+' ('+n+')</h3>'+ids.map(u=>'<span class="tag">'+esc(P[u].name)+(u===G.host?' ★':'')+(isHost&&u!==uid?'<button class="x" title="'+L('Kick','เชิญออก')+'" data-a="kick" data-v="'+esc(u)+'">✕</button>':'')+'</span>').join('')+
+  cfgUI(n)+(err?'<p class="err">'+err+'</p>':'')+
+  '<p>'+(isHost?'<button data-a="start" '+(err?'disabled':'')+'>'+L('Start game','เริ่มเกม')+'</button>':'<span class="mu">'+L('Waiting for the host to start…','กำลังรอโฮสต์เริ่มเกม…')+'</span>')+'</p></div>';return}
  const me=G.pl[uid];
  if(!me){$app.innerHTML=head+'<div class="card">'+L('This game has already started. You are not in it.','เกมนี้เริ่มไปแล้ว คุณไม่ได้อยู่ในเกมนี้')+'</div>';return}
  const R=ROLES[me.role];
- const key=G.phase+G.day+G.night;if(key!==selKey){selKey=key;sel=null}
+ const key=G.phase+G.day+G.night+(G.np||'');if(key!==selKey){selKey=key;sel=null}
  let h=head;
  if(G.phase==='end'){
-  const msg={c:L('Civilians win! All murderers are gone.','พลเรือนชนะ! ฆาตกรทั้งหมดถูกกำจัดแล้ว'),m:L('Murderers win!','ฆาตกรชนะ!'),d:L('The Drunk wins! The mob sent them away.','คนเมาชนะ! ฝูงชนขับไล่เขาออกไป')}[G.winner];
+  const msg={c:L('Civilians win! The Murderer is gone.','พลเรือนชนะ! ฆาตกรถูกกำจัดแล้ว'),m:L('Murderers win!','ฆาตกรชนะ!'),d:L('The Drunk wins! The mob sent them away.','คนเมาชนะ! ฝูงชนขับไล่เขาออกไป')}[G.winner];
   h+='<div class="card"><h3>'+msg+'</h3>'+roster()+'</div>';
  }else if(!me.alive){
   h+='<div class="card"><h3>'+L('You have left the game','คุณออกจากเกมแล้ว')+'</h3><p class="mu">'+L("You can see everyone's role and intel now.",'ตอนนี้คุณเห็นบทบาทและข้อมูลของทุกคนแล้ว')+'</p>'+roster()+'</div>';
  }
- h+='<div class="card"><div class="mu">'+L('Your secret','ความลับของคุณ')+'</div><h3>'+rn(R)+' <span class="tag">'+tm(R.t)+'</span> <span class="tag">'+L('Room','ห้อง')+' '+me.room+'</span>'+(me.alive?'':' <span class="tag">'+L('left the game','ออกจากเกมแล้ว')+'</span>')+'</h3><div>'+rd(R)+'</div>';
+ h+='<div class="card"><div class="mu">'+L('Your secret','ความลับของคุณ')+'</div><h3>'+rn(R)+' <span class="tag">'+tm(R.t)+'</span> <span class="tag">'+L('Room','ห้อง')+' '+rl(me.room)+'</span>'+(me.alive?'':' <span class="tag">'+L('left the game','ออกจากเกมแล้ว')+'</span>')+'</h3><div>'+rd(R)+'</div>';
  if(R.t==='m')h+='<p>'+L('Team:','ทีม:')+' '+Object.values(G.pl).filter(p=>ROLES[p.role].t==='m').map(p=>esc(p.name)+' ('+rn(ROLES[p.role])+')').join(', ')+'</p>';
  h+='</div>';
  if(G.phase==='night')h+=nightUI(me,R);
@@ -271,42 +343,53 @@ function render(){
   const inf=G.info[uid]||[];
   if(inf.length)h+='<div class="card"><h3>'+L('Your intel','ข้อมูลของคุณ')+'</h3><ul>'+inf.map(e=>'<li>'+renderInfo(e)+'</li>').join('')+'</ul></div>';
  }
- h+='<div class="card"><h3>'+L('Hotel','โรงแรม')+'</h3><div class="mu">'+L(G.n+' floors, 3 rooms each. ⚖ Mob Justice · ∅ Empty · 🔪 Murdered · 💀 Body Found. Marked rooms can’t be chosen for a mob.',G.n+' ชั้น ชั้นละ 3 ห้อง ⚖ ประชาทัณฑ์ · ∅ ห้องว่าง · 🔪 ถูกฆาตกรรม · 💀 พบศพ ห้องที่มีเครื่องหมายจะเลือกลงประชาทัณฑ์ไม่ได้')+'</div>'+bld(false)+'</div>';
+ const legend=['empty','murdered','mob','body'].map(k=>'<span class="tag st-'+k+'">'+SL[k].g+' '+SL[k].n[LANG]+'</span>').join('');
+ h+='<div class="card"><h3>'+L('Hotel','โรงแรม')+'</h3><div class="mu">'+L(G.n+' floors × 3 buildings (A–C). Marked rooms can’t be chosen for a mob.',G.n+' ชั้น × 3 ตึก (A–C) ห้องที่มีเครื่องหมายจะเลือกลงประชาทัณฑ์ไม่ได้')+'</div><div style="margin:6px 0">'+legend+'</div>'+bld(false)+'</div>';
  h+='<div class="card"><h3>'+L('Players','ผู้เล่น')+'</h3>'+Object.values(G.pl).map(p=>'<span class="tag '+(p.alive?'':'dead')+'">'+esc(p.name)+'</span>').join('')+
   '<h3 style="margin-top:12px">'+L('What happened','เกิดอะไรขึ้นบ้าง')+'</h3><ul>'+[...G.log].reverse().map(e=>'<li>'+renderLog(e)+'</li>').join('')+'</ul></div>';
  if(isHost&&G.phase!=='end')h+='<p><button class="s" data-a="force">'+L('Host: force-continue this phase','โฮสต์: บังคับให้เฟสนี้ดำเนินต่อ')+'</button></p>';
  $app.innerHTML=h;
 }
-function nightUI(me,R){
- const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),done=al.filter(u=>P[u]?.act?.n===G.night).length;
- let h='<div class="card"><h3>'+L('Night','คืนที่')+' '+G.night+' '+L('of','จาก')+' '+(G.D-1)+'</h3>';
- if(!me.alive)return h+'<p class="mu">'+L('You have left the game. Watching','คุณออกจากเกมแล้ว กำลังรับชม')+' ('+done+'/'+al.length+' '+L('ready','พร้อม')+').</p></div>';
- if(P[uid]?.act?.n===G.night)return h+'<p>'+L('Choice sent. Waiting for others…','ส่งตัวเลือกแล้ว กำลังรอคนอื่น…')+' ('+done+'/'+al.length+')</p></div>';
- const k=R.k;
- if(k==='none')h+='<p>'+L('Nothing to do tonight. Press the button so nobody can tell who has an ability.','คืนนี้ไม่มีอะไรต้องทำ กดปุ่มเพื่อไม่ให้ใครรู้ว่าคุณมีความสามารถหรือไม่')+'</p>';
+function nightKind(me){ // what this player does in the current night step, or null if they just wait
+ if(G.np===1)return me.role==='drunk'?'room':null;
+ if(G.np===3)return me.role==='murd'?'room':null;
+ return me.role==='drunk'||me.role==='murd'?'none':ROLES[me.role].k;
+}
+function nightUI(me){
+ const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),done=al.filter(u=>P[u]?.act?.n===G.night&&P[u].act.p===2).length;
+ let h='<div class="card"><h3>'+L('Night','คืนที่')+' '+G.night+' '+L('of','จาก')+' '+(G.D-1)+' <span class="tag">'+L('Step','ขั้นที่')+' '+G.np+'/3</span></h3>';
+ const cnt=G.np===2?' ('+done+'/'+al.length+' '+L('ready','พร้อม')+')':'';
+ if(!me.alive)return h+'<p class="mu">'+L('You have left the game. Watching','คุณออกจากเกมแล้ว กำลังรับชม')+cnt+'.</p></div>';
+ const k=nightKind(me);
+ const wait=G.np===3?L('The Murderer is choosing a room… please wait.','ฆาตกรกำลังเลือกห้อง… กรุณารอสักครู่'):L('Night falls… please wait.','ค่ำคืนมาเยือน… กรุณารอสักครู่');
+ if(k===null)return h+'<p>'+wait+'</p></div>';
+ if(mine.act&&mine.act.n===G.night&&mine.act.p===G.np)return h+'<p>'+L('Choice sent. Waiting for others…','ส่งตัวเลือกแล้ว กำลังรอคนอื่น…')+cnt+'</p></div>';
+ if(k==='none')h+='<p>'+L('Nothing to do now. Press Confirm so nobody can tell who has an ability.','ตอนนี้ไม่มีอะไรต้องทำ กดยืนยันเพื่อไม่ให้ใครรู้ว่าคุณมีความสามารถหรือไม่')+cnt+'</p>';
  else if(k==='room')h+='<p>'+L('Choose a room.','เลือกห้อง')+'</p>'+bld(true,{disable:me.role==='lock'?G.lastLock:null});
  else if(k==='floor')h+='<p>'+L('Choose a floor.','เลือกชั้น')+'</p><div class="row">'+Array.from({length:G.n},(_,i)=>'<button class="s'+(sel===i+1?' on':'')+'" data-a="sel" data-v="'+(i+1)+'">'+L('Floor','ชั้น')+' '+(i+1)+'</button>').join('')+'</div>';
- else if(k==='col')h+='<p>'+L('Choose a row.','เลือกแถว')+'</p><div class="row">'+[1,2,3].map(i=>'<button class="s'+(sel===i?' on':'')+'" data-a="sel" data-v="'+i+'">'+L('Row','แถว')+' '+i+'</button>').join('')+'</div>';
+ else if(k==='col')h+='<p>'+L('Choose a building.','เลือกตึก')+'</p><div class="row">'+[1,2,3].map(i=>'<button class="s'+(sel===i?' on':'')+'" data-a="sel" data-v="'+i+'">'+L('Building','ตึก')+' '+bn(i)+'</button>').join('')+'</div>';
  else if(k==='person')h+='<p>'+L('Choose a person.','เลือกคน')+'</p><div class="row">'+al.filter(u=>u!==uid).map(u=>'<button class="s'+(sel===u?' on':'')+'" data-a="sel" data-v="'+esc(u)+'">'+esc(G.pl[u].name)+'</button>').join('')+'</div>';
  return h+'<p><button data-a="go" '+(k!=='none'&&sel===null?'disabled':'')+'>'+L('Confirm','ยืนยัน')+'</button></p></div>';
 }
 function dayUI(me){
- const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),need=Math.ceil(al.length/2);
+ const al=Object.keys(G.pl).filter(u=>G.pl[u].alive),need=Math.floor(al.length/2)+1;
  let h='<div class="card"><h3>'+L('Day','วันที่')+' '+G.day+' '+L('of','จาก')+' '+G.D+'</h3>';
  if(!me.alive)return h+'<p class="mu">'+L('You have left the game. Keep watching.','คุณออกจากเกมแล้ว ดูต่อไปได้')+'</p></div>';
- h+='<p class="mu">'+L('Talk it out on voice chat. ','พูดคุยกันในแชทเสียง ')+need+L(' of ',' จาก ')+al.length+L(' players must approve a mob justice. The day ends after one mob, or when ',' คนต้องเห็นชอบจึงจะลงประชาทัณฑ์ได้ วันนี้จะจบลงเมื่อมีการลงประชาทัณฑ์ครั้งเดียว หรือเมื่อมี ')+need+L(' players choose to skip.',' คนเลือกข้ามวันนี้')+'</p>';
- if(G.prop){
-  const y=al.filter(u=>P[u]?.vote?.id===G.prop.id&&P[u].vote.y).length,no=al.filter(u=>P[u]?.vote?.id===G.prop.id&&!P[u].vote.y).length;
-  const mv=P[uid]?.vote?.id===G.prop.id?P[uid].vote.y:null;
-  h+='<div class="card"><b>'+esc(G.pl[G.prop.by].name)+'</b> '+L('proposes mob justice on','เสนอให้ลงประชาทัณฑ์ที่')+' <b>'+L('room','ห้อง')+' '+G.prop.room+'</b><div class="mu">'+L('Yes','เห็นด้วย')+' '+y+' · '+L('No','ไม่เห็นด้วย')+' '+no+'</div><div class="row">'+
-   '<button class="'+(mv===true?'on':'')+'" data-a="vote" data-v="1">'+L('Approve','เห็นชอบ')+'</button><button class="s '+(mv===false?'on':'')+'" data-a="vote" data-v="0">'+L('Reject','ปฏิเสธ')+'</button></div></div>';
- }else{
-  h+='<div class="row"><select id="pr">'+bldOpts()+'</select><button data-a="prop">'+L('Propose mob justice','เสนอให้ลงประชาทัณฑ์')+'</button></div>';
+ h+='<p class="mu">'+L('Talk it out on voice chat. Anyone can propose mob justice on a room (it counts as their Accept). When every living player has voted on a proposal, it passes with '+need+' of '+al.length+' Accepts; otherwise it is dropped and the day goes on. The day also ends if '+need+' players choose No mob today.',
+  'พูดคุยกันในแชทเสียง ใครก็เสนอให้ลงประชาทัณฑ์ห้องใดก็ได้ (นับเป็นการเห็นชอบของผู้เสนอ) เมื่อผู้เล่นที่ยังอยู่ทุกคนโหวตครบ ข้อเสนอจะผ่านถ้ามีผู้เห็นชอบ '+need+' จาก '+al.length+' คน ไม่เช่นนั้นข้อเสนอจะตกไปและวันนี้ดำเนินต่อ วันนี้จะจบลงเช่นกันถ้ามี '+need+' คนเลือกไม่ลงประชาทัณฑ์')+'</p>';
+ for(const pr of (G.props||[])){
+  const vs=al.map(u=>(P[u]?.votes||{})[pr.id]),y=vs.filter(v=>v===true).length,no=vs.filter(v=>v===false).length;
+  const mv=(mine.votes||{})[pr.id];
+  h+='<div class="card"><b>'+esc(G.pl[pr.by].name)+'</b> '+L('proposes mob justice on','เสนอให้ลงประชาทัณฑ์ที่')+' <b>'+L('room','ห้อง')+' '+rl(pr.room)+'</b><div class="mu">'+L('Accept','เห็นชอบ')+' '+y+' · '+L('Reject','ปฏิเสธ')+' '+no+' · '+L('Waiting','รอโหวต')+' '+(al.length-y-no)+'</div><div class="row">'+
+   '<button class="'+(mv===true?'on':'')+'" data-a="vote" data-id="'+esc(pr.id)+'" data-v="1">'+L('Accept','เห็นชอบ')+'</button><button class="s '+(mv===false?'on':'')+'" data-a="vote" data-id="'+esc(pr.id)+'" data-v="0">'+L('Reject','ปฏิเสธ')+'</button></div></div>';
  }
+ const opts=bldOpts();
+ h+=opts?'<div class="row"><select id="pr" style="width:auto">'+opts+'</select><button data-a="prop">'+L('Propose mob justice','เสนอให้ลงประชาทัณฑ์')+'</button></div>':'<p class="mu">'+L('No rooms left to propose.','ไม่มีห้องให้เสนอแล้ว')+'</p>';
  const sk=al.filter(u=>P[u]?.skip===G.day).length;
  return h+'<p><button class="s '+(P[uid]?.skip===G.day?'on':'')+'" data-a="skip">'+L('No mob today','ไม่ลงประชาทัณฑ์วันนี้')+' ('+sk+'/'+need+')</button></p></div>';
 }
-function bldOpts(){let o='';for(let f=1;f<=G.n;f++)for(let c=1;c<=3;c++){const r=f*100+c;if(!(G.st||{})[r])o+='<option>'+r+'</option>'}return o}
+function bldOpts(){let o='';const open=(G.props||[]).map(p=>p.room);
+ for(let f=1;f<=G.n;f++)for(let c=1;c<=3;c++){const r=f*100+c;if(!(G.st||{})[r]&&!open.includes(r))o+='<option value="'+r+'">'+rl(r)+'</option>'}return o}
 
 $app.addEventListener('click',e=>{
  const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
@@ -315,13 +398,19 @@ $app.addEventListener('click',e=>{
   if(a==='new')return startHost(rand(4));const c=document.getElementById('cd').value.trim();if(c.length!==4)return alert(L('Enter the 4-letter code.','กรุณาใส่รหัส 4 ตัวอักษร'));return startClient(c)}
  if(a==='leave')return leave();
  if(a==='start')return start();
+ if(a==='kick')return kick(v);
  if(a==='force'){force=true;return tick()}
  if(a==='sel'){sel=isNaN(v)?v:+v;return render()}
- if(a==='go'){const R=ROLES[G.pl[uid].role];mine={...mine,act:{n:G.night,v:R.k==='none'?0:sel}};sel=null;return push()}
+ if(a==='go'){const k=nightKind(G.pl[uid]);if(!k)return;mine={...mine,act:{n:G.night,p:G.np,v:k==='none'?0:sel}};sel=null;render();return push()}
+ const keepVotes=()=>{const o={},ids=(G.props||[]).map(p=>p.id);for(const id in (mine.votes||{}))if(ids.includes(id))o[id]=mine.votes[id];return o};
  if(a==='prop'){const room=+document.getElementById('pr').value,seq=Date.now();
-  mine={...mine,prop:{seq,room},vote:{id:uid+':'+seq,y:true}};return push()}
- if(a==='vote'){mine={...mine,vote:{id:G.prop.id,y:v==='1'}};return push()}
+  mine={...mine,props:[...(mine.props||[]),{seq,room}].slice(-5),votes:{...keepVotes(),[uid+':'+seq]:true}};return push()}
+ if(a==='vote'){mine={...mine,votes:{...keepVotes(),[b.dataset.id]:v==='1'}};return push()}
  if(a==='skip'){mine={...mine,skip:P[uid]?.skip===G.day?0:G.day};return push()}
+});
+$app.addEventListener('change',e=>{
+ const s=e.target.closest('[data-cfg]');if(!s||!isHost||!HG||HG.phase!=='lobby')return;
+ const [r,i]=s.dataset.cfg.split(':');HG.cfg[r][+i]=+s.value;ls('hm_cfg',JSON.stringify(HG.cfg));tick();
 });
 
 /* ---------- boot ---------- */

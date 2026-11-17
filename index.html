@@ -30,6 +30,7 @@ ul{padding-left:20px;margin:.3em 0}.big{font-size:2em;font-weight:700;letter-spa
    Free PeerJS cloud is used only for the initial handshake. */
 const $app=document.getElementById('app');
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
 let LANG=ls('hm_lang')||'en';
 const L=(en,th)=>LANG==='th'?th:en;
 const ROLES={
@@ -50,7 +51,6 @@ const SL={mob:{g:'⚖',n:{en:'Mob Justice',th:'ประชาทัณฑ์'}}
 const fl=r=>Math.floor(r/100);
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const rand=n=>Array.from({length:n},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('');
-const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
 const clone=o=>JSON.parse(JSON.stringify(o));
 
 let uid=ls('hm_uid')||('u'+rand(10)),name=ls('hm_name')||'',code='',isHost=false,peer,conn,conns={};
